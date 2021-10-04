@@ -1,0 +1,3 @@
+set xlabel "Matrix dimension (n)"
+set ylabel "delta"
+plot "gnuplot_task_9.txt" with lines
