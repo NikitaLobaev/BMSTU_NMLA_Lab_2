@@ -8,14 +8,26 @@
 template <class T, class T2>
 T2 delta(const Lobaev::Math::Vector<T>&, const Lobaev::Math::Vector<T>&);
 
-const size_t gnuplot_task_9_graph_1 = 1,
-gnuplot_task_9_graph_2 = 2,
-gnuplot_task_9_graph_3 = 3,
-gnuplot_task_9_graph_4 = 4,
-gnuplot_task_9_graph_5 = 5,
-gnuplot_task_9_graph_6 = 6;
+enum GnuplotTask9Graph {
+    GAUSS_BASIC,
+    GAUSS_BY_ROW,
+    GAUSS_BY_COLUMNS,
+    GAUSS_BASIC_WITH_DD,
+    GAUSS_BY_ROW_WITH_DD,
+    GAUSS_BY_COLUMNS_WITH_DD
+};
 
-const char *usage = "Usage: lab2 <gnuplot task 9 command file> <gnuplot task 9 output file> <selected graph number>";
+const size_t gnuplot_task_9_graphs_size = 6;
+const GnuplotTask9Graph gnuplot_task_9_graphs[gnuplot_task_9_graphs_size]{
+    GAUSS_BASIC,
+    GAUSS_BY_ROW,
+    GAUSS_BY_COLUMNS,
+    GAUSS_BASIC_WITH_DD,
+    GAUSS_BY_ROW_WITH_DD,
+    GAUSS_BY_COLUMNS_WITH_DD
+};
+
+const char *usage = "Usage: lab2 <gnuplot task 9 command file> <gnuplot task 9 output file> <selected graph index>";
 
 int main(int argc, char **argv) {
     if (argc != 4) {
@@ -27,11 +39,13 @@ int main(int argc, char **argv) {
 
     const std::string gnuplot_task_9_output_filename = argv[2];
 
-    const size_t selected_gnuplot_task_9_graph_number = std::stoul(argv[3]);
-    if (selected_gnuplot_task_9_graph_number > gnuplot_task_9_graph_6) {
+    const size_t selected_gnuplot_task_9_graph_index = std::stoul(argv[3]);
+    if (selected_gnuplot_task_9_graph_index >= gnuplot_task_9_graphs_size) {
         std::cerr << usage << std::endl;
         return 1;
     }
+
+    const GnuplotTask9Graph selected_gnuplot_task_9_graph = gnuplot_task_9_graphs[selected_gnuplot_task_9_graph_index];
 
     std::srand(std::time(nullptr)); //для генерации случайных матриц с диагональным преобладанием
 
@@ -63,6 +77,8 @@ int main(int argc, char **argv) {
     }
 
     { //вычисление погрешности вычислений методов Гаусса простого, "по строкам", и "по столбцам"
+        std::cout << "--- Task 7 ---" << std::endl;
+
         const Lobaev::Math::Matrix<int> matrix_a({
             {3, 2, 1, 1},
             {1, -1, 4, -1},
@@ -95,64 +111,54 @@ int main(int argc, char **argv) {
 
             std::cout << delta<int, double>(solution_by_columns, solution) << '%' << std::endl;
         }
+
+        std::cout << "--------------" << std::endl;
     }
 
     { //генерация случайных матриц с диагональным преобладанием
+        std::cout << "--- Task 9 ---" << std::endl;
+
+        Lobaev::Math::Vector<double> (*selected_gauss)(Lobaev::Math::Matrix<double>, Lobaev::Math::Vector<double>);
+        switch (selected_gnuplot_task_9_graph) {
+            case GAUSS_BASIC:
+            case GAUSS_BASIC_WITH_DD:
+                selected_gauss = Lobaev::Math::Gauss::gauss_basic;
+                break;
+            case GAUSS_BY_ROW:
+            case GAUSS_BY_ROW_WITH_DD:
+                selected_gauss = Lobaev::Math::Gauss::gauss_by_row;
+                break;
+            default: //GAUSS_BY_COLUMNS, GAUSS_BY_COLUMNS_WITH_DD
+                selected_gauss = Lobaev::Math::Gauss::gauss_by_columns;
+                break;
+        }
+
         std::ofstream gnuplot_task_9_ofstream(gnuplot_task_9_output_filename);
 
         const double from = -1000;
         const double to = 1000;
-        for (size_t dimension = 2; dimension <= 100; dimension++) {
+
+        for (size_t dimension = 2; dimension <= 150; dimension++) {
+            if (dimension % 20 == 0) {
+                std::cout << "\tdimension = " << dimension << std::endl;
+            }
+
             Lobaev::Math::Matrix<double> matrix_a = gen_random_matrix<double>(dimension, from, to);
             const Lobaev::Math::Vector<double> vector_f = gen_random_vector<double>(dimension, from, to);
 
-            try {
-                const Lobaev::Math::Vector<double> solution_basic = Lobaev::Math::Gauss::gauss_basic(matrix_a, vector_f);
-                const Lobaev::Math::Vector<double> solution_by_row = Lobaev::Math::Gauss::gauss_by_row(matrix_a, vector_f);
-                const Lobaev::Math::Vector<double> solution_by_columns = Lobaev::Math::Gauss::gauss_by_columns(matrix_a, vector_f);
-                const Lobaev::Math::Vector<double> solution = Lobaev::Math::Gauss::gauss(matrix_a, vector_f);
-
-                const double delta_basic = delta<double, double>(solution_basic, solution);
-                const double delta_by_row = delta<double, double>(solution_by_row, solution);
-                const double delta_by_columns = delta<double, double>(solution_by_columns, solution);
-
-                switch (selected_gnuplot_task_9_graph_number) {
-                    case gnuplot_task_9_graph_1:
-                        gnuplot_task_9_ofstream << dimension << ' ' << delta_basic << std::endl;
-                        break;
-                    case gnuplot_task_9_graph_2:
-                        gnuplot_task_9_ofstream << dimension << ' ' << delta_by_row << std::endl;
-                        break;
-                    case gnuplot_task_9_graph_3:
-                        gnuplot_task_9_ofstream << dimension << ' ' << delta_by_columns << std::endl;
-                        break;
-                }
-            } catch (const char *exception) {
+            if (selected_gnuplot_task_9_graph == GAUSS_BASIC_WITH_DD ||
+                    selected_gnuplot_task_9_graph == GAUSS_BY_ROW_WITH_DD ||
+                    selected_gnuplot_task_9_graph == GAUSS_BY_COLUMNS_WITH_DD) {
+                make_matrix_diagonally_dominant(matrix_a, from, to);
             }
 
-            make_matrix_diagonally_dominant(matrix_a, from, to);
-
             try {
-                const Lobaev::Math::Vector<double> solution_basic = Lobaev::Math::Gauss::gauss_basic(matrix_a, vector_f);
-                const Lobaev::Math::Vector<double> solution_by_row = Lobaev::Math::Gauss::gauss_by_row(matrix_a, vector_f);
-                const Lobaev::Math::Vector<double> solution_by_columns = Lobaev::Math::Gauss::gauss_by_columns(matrix_a, vector_f);
-                const Lobaev::Math::Vector<double> solution = Lobaev::Math::Gauss::gauss(matrix_a, vector_f);
+                const Lobaev::Math::Vector<double> ref_solution = Lobaev::Math::Gauss::gauss(matrix_a, vector_f);
+                const Lobaev::Math::Vector<double> solution = selected_gauss(matrix_a, vector_f);
 
-                const double delta_basic = delta<double, double>(solution_basic, solution);
-                const double delta_by_row = delta<double, double>(solution_by_row, solution);
-                const double delta_by_columns = delta<double, double>(solution_by_columns, solution);
+                const auto delta_value = delta<double, double>(solution, ref_solution);
 
-                switch (selected_gnuplot_task_9_graph_number) {
-                    case gnuplot_task_9_graph_4:
-                        gnuplot_task_9_ofstream << dimension << ' ' << delta_basic << std::endl;
-                        break;
-                    case gnuplot_task_9_graph_5:
-                        gnuplot_task_9_ofstream << dimension << ' ' << delta_by_row << std::endl;
-                        break;
-                    case gnuplot_task_9_graph_6:
-                        gnuplot_task_9_ofstream << dimension << ' ' << delta_by_columns << std::endl;
-                        break;
-                }
+                gnuplot_task_9_ofstream << dimension << ' ' << delta_value << std::endl;
             } catch (const char *exception) {
             }
         }
@@ -165,6 +171,8 @@ int main(int argc, char **argv) {
         gnuplot_task_9_ofstream.close();
 
         system(("gnuplot --persist \"" + gnuplot_task_9_command_filename + "\"").c_str());
+
+        std::cout << "--------------" << std::endl;
     }
 
     return 0;
