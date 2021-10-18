@@ -1,12 +1,20 @@
 #include <Eigen/Dense>
 #include <ctime>
 #include <iostream>
-#include <fstream>
+#include <stdlib.h>
 #include "Gauss.cpp"
 #include "generator.cpp"
 
 template <class T, class T2>
 T2 delta(const Lobaev::Math::Vector<T>&, const Lobaev::Math::Vector<T>&);
+
+Eigen::MatrixXd transform(const Lobaev::Math::Matrix<double>&);
+Lobaev::Math::Matrix<double> transform(const Eigen::MatrixXd&);
+
+Lobaev::Math::Matrix<double> reverse(const Lobaev::Math::Matrix<double>&);
+
+template <class T, class T2>
+T2 conditionalities_count(const Lobaev::Math::Matrix<T>&, const Lobaev::Math::Matrix<T>&);
 
 enum GnuplotTask9Graph {
     GAUSS_BASIC,
@@ -27,19 +35,15 @@ const GnuplotTask9Graph gnuplot_task_9_graphs[gnuplot_task_9_graphs_size]{
     GAUSS_BY_COLUMNS_WITH_DD
 };
 
-const char *usage = "Usage: lab2 <gnuplot task 9 command file> <gnuplot task 9 output file> <selected graph index>";
+const char *usage = "Usage: lab2 <gnuplot task 9 command file> <selected graph index>";
 
 int main(int argc, char **argv) {
-    if (argc != 4) {
+    if (argc != 3) {
         std::cerr << usage << std::endl;
         return 1;
     }
 
-    const std::string gnuplot_task_9_command_filename = argv[1];
-
-    const std::string gnuplot_task_9_output_filename = argv[2];
-
-    const size_t selected_gnuplot_task_9_graph_index = std::stoul(argv[3]);
+    const size_t selected_gnuplot_task_9_graph_index = std::stoul(argv[2]);
     if (selected_gnuplot_task_9_graph_index >= gnuplot_task_9_graphs_size) {
         std::cerr << usage << std::endl;
         return 1;
@@ -133,7 +137,7 @@ int main(int argc, char **argv) {
                 break;
         }
 
-        std::ofstream gnuplot_task_9_ofstream(gnuplot_task_9_output_filename);
+        std::stringstream gnuplot_delta_buffer, gnuplot_conds_buffer;
 
         const double from = -1000;
         const double to = 1000;
@@ -157,20 +161,34 @@ int main(int argc, char **argv) {
                 const Lobaev::Math::Vector<double> solution = selected_gauss(matrix_a, vector_f);
 
                 const auto delta_value = delta<double, double>(solution, ref_solution);
+                gnuplot_delta_buffer << dimension << ' ' << delta_value << std::endl;
 
-                gnuplot_task_9_ofstream << dimension << ' ' << delta_value << std::endl;
+                const auto cond_count = conditionalities_count<double, double>(matrix_a, reverse(matrix_a));
+                gnuplot_conds_buffer << dimension << ' ' << cond_count << std::endl;
             } catch (const char *exception) {
             }
         }
 
-        gnuplot_task_9_ofstream.close();
+        {
+            FILE *gnuplot = popen("gnuplot --persist", "w");
+            if (!gnuplot) {
+                throw "";
+            }
 
-        gnuplot_task_9_ofstream = std::ofstream(gnuplot_task_9_command_filename);
-        gnuplot_task_9_ofstream << "set xlabel \"Matrix dimension (n)\"" << std::endl << "set ylabel \"delta\"" <<
-        std::endl << "plot \"" << gnuplot_task_9_output_filename << "\" with lines" << std::endl;
-        gnuplot_task_9_ofstream.close();
+            fprintf(gnuplot, "set xlabel \"Matrix dimension (n)\";\nset ylabel \"delta\"\n$Data <<EOD\n%sEOD\nplot $Data title '' with lines;\n", gnuplot_delta_buffer.str().c_str());
 
-        system(("gnuplot --persist \"" + gnuplot_task_9_command_filename + "\"").c_str());
+            pclose(gnuplot);
+        }
+        {
+            FILE *gnuplot = popen("gnuplot --persist", "w");
+            if (!gnuplot) {
+                throw "";
+            }
+
+            fprintf(gnuplot, "set xlabel \"Matrix dimension (n)\";\nset ylabel \"Conditionalities count\"\n$Data <<EOD\n%sEOD\nplot $Data title '' with lines;\n", gnuplot_conds_buffer.str().c_str());
+
+            pclose(gnuplot);
+        }
 
         std::cout << "--------------" << std::endl;
     }
@@ -187,4 +205,45 @@ T2 delta(const Lobaev::Math::Vector<T> &result, const Lobaev::Math::Vector<T> &e
     const T2 result_norm_euclidean = expected_result.template norm_euclidean<T2>();
 
     return diff_norm_euclidean * 100.0 / result_norm_euclidean;
+}
+
+Eigen::MatrixXd transform(const Lobaev::Math::Matrix<double> &source_matrix) {
+    Eigen::MatrixXd result_matrix(source_matrix.rows_count(), source_matrix.columns_count());
+    for (size_t row_index = 0; row_index < source_matrix.rows_count(); row_index++) {
+        for (size_t column_index = 0; column_index < source_matrix.columns_count(); column_index++) {
+            result_matrix(row_index, column_index) = source_matrix(row_index, column_index);
+        }
+    }
+
+    return result_matrix;
+}
+
+Lobaev::Math::Matrix<double> transform(const Eigen::MatrixXd &source_matrix) {
+    Lobaev::Math::Matrix<double> result_matrix(source_matrix.rows(), source_matrix.cols());
+    for (size_t row_index = 0; row_index < result_matrix.rows_count(); row_index++) {
+        for (size_t column_index = 0; column_index < result_matrix.columns_count(); column_index++) {
+            result_matrix(row_index, column_index) = source_matrix(row_index, column_index);
+        }
+    }
+
+    return result_matrix;
+}
+
+Lobaev::Math::Matrix<double> reverse(const Lobaev::Math::Matrix<double> &source_matrix) {
+    const Eigen::MatrixXd source_transformed_matrix = transform(source_matrix);
+
+    const Eigen::MatrixXd transformed_reversed_matrix = source_transformed_matrix.inverse();
+
+    Lobaev::Math::Matrix<double> result_matrix = transform(transformed_reversed_matrix);
+
+    return result_matrix;
+}
+
+template <class T, class T2>
+T2 conditionalities_count(const Lobaev::Math::Matrix<T> &matrix, const Lobaev::Math::Matrix<T> &reversed_matrix) {
+    const T2 matrix_norm = matrix.template norm_euclidean<T2>();
+
+    const T2 reversed_matrix_norm = reversed_matrix.template norm_euclidean<T2>();
+
+    return matrix_norm * reversed_matrix_norm;
 }
